@@ -12,6 +12,7 @@
 */
 #include "common.h"
 #include "FIFORequestChannel.h"
+#include <sys/wait.h>
 
 using namespace std;
 
@@ -27,8 +28,11 @@ int main (int argc, char *argv[]) {
 	// int l = 0;
 	// server variable
 	int m = 5000;
+	// new channel
+	bool new_chan = false;
+	vector<FIFORequestChannel*> channels;
 	
-	while ((opt = getopt(argc, argv, "p:t:e:f:m:")) != -1) {
+	while ((opt = getopt(argc, argv, "p:t:e:f:m:c")) != -1) {
 		switch (opt) {
 			case 'p':
 				p = atoi (optarg);
@@ -52,6 +56,9 @@ int main (int argc, char *argv[]) {
 			case 'm':
 				m = atoi (optarg);
 				break;
+			case 'c':
+				new_chan = true;
+				break;
 		}
 	}
 
@@ -65,8 +72,26 @@ int main (int argc, char *argv[]) {
 		execvp(argv_server[0], (char**) argv_server);
 	} else{
 
-		FIFORequestChannel chan("control", FIFORequestChannel::CLIENT_SIDE);
-		
+		FIFORequestChannel chan0("control", FIFORequestChannel::CLIENT_SIDE);
+		channels.push_back(&chan0);
+
+		if (new_chan){
+			MESSAGE_TYPE chan_msg = NEWCHANNEL_MSG;
+			chan0.cwrite(&chan_msg, sizeof(MESSAGE_TYPE));
+			// cout << "break 1" << endl;
+
+			char chan_name[7];
+			chan0.cread(&chan_name, 6); // TODO
+			// cout << "break 2: " << chan_name << "!"<< endl;
+
+			FIFORequestChannel *chan1 = new FIFORequestChannel(chan_name, FIFORequestChannel::CLIENT_SIDE);
+			channels.push_back(chan1);
+		}
+			// cout << "break 2.5" << endl;
+
+		FIFORequestChannel chan = *(channels.back());
+
+			// cout << "break 3" << endl;
 		// PATIENT data request 
 		if (p != -1){
 			char buf[MAX_MESSAGE]; // 256
@@ -169,5 +194,17 @@ int main (int argc, char *argv[]) {
 		// closing the channel    
 		MESSAGE_TYPE msg = QUIT_MSG;
 		chan.cwrite(&msg, sizeof(MESSAGE_TYPE));
+
+		// if new channel was created:
+		// - delete the new channel (allocated dynamically)
+		// - close the unused control chan
+		if (new_chan){
+			delete channels.back();
+
+			FIFORequestChannel ctrl = *(channels[0]);
+			ctrl.cwrite(&msg, sizeof(MESSAGE_TYPE));
+		}
+		// wait for server to 
+		wait(&pid);
 	}
 }
