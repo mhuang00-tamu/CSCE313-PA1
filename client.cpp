@@ -114,11 +114,11 @@ int main (int argc, char *argv[]) {
 				// 	return 1;  // Or handle error accordingly
 				// }
 
-				char* reply = new char[fm.length];
-				for (int i = 0; i < l; i++){
-					chan.cread(&reply, fm.length); 
-					fprintf(fptr, "%s", reply);
-				}
+				char* reply = new char[l];
+				// for (int i = 0; i < l; i++){
+					chan.cread(reply, l); 
+					fwrite(reply, 1, l, fptr);
+				// }
 				fclose(fptr);
 				delete[] reply;
 
@@ -126,11 +126,6 @@ int main (int argc, char *argv[]) {
 
 		}
 				
-
-
-
-
-		
 		// closing the channel    
 		MESSAGE_TYPE m = QUIT_MSG;
 		chan.cwrite(&m, sizeof(MESSAGE_TYPE));
