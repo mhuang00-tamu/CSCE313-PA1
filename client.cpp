@@ -18,17 +18,17 @@ using namespace std;
 
 int main (int argc, char *argv[]) {
 	int opt;
-	int p = 1;
+	int p = -1;
 	double t = -1.0;
 	int e = -1;
 	// file variables
-	string filename = "1.csv"; //TODO replace
-	int o = 0;
-	int l = 0;
+	string filename = ""; 
+	// int o = 0;
+	// int l = 0;
 	// server variable
-	const char *m = "5000";
+	int m = 5000;
 	
-	while ((opt = getopt(argc, argv, "p:t:e:f:o:l:m:")) != -1) {
+	while ((opt = getopt(argc, argv, "p:t:e:f:m:")) != -1) {
 		switch (opt) {
 			case 'p':
 				p = atoi (optarg);
@@ -42,22 +42,24 @@ int main (int argc, char *argv[]) {
 			case 'f':
 				filename = optarg;
 				break;
-			case 'o':
-				o = atoi (optarg);
-				break;
-			case 'l':
-				l = atoi (optarg);
-				break;
+			// case 'o':
+			// 	o = atoi (optarg);
+			// 	break;
+			// case 'l':
+			// 	l = atoi (optarg);
+			// 	break;
 			// server variable
 			case 'm':
-				m = optarg;
+				m = atoi (optarg);
 				break;
 		}
 	}
 
 	// give args for server
 	// ** CREATE SERVER AS CHILD ** 
-	const char *argv_server[] = {"./server", "-m", m, NULL};
+	char mchar[20];
+	sprintf(mchar, "%d", m);
+	const char *argv_server[] = {"./server", "-m", mchar, NULL};
 	int pid = fork();
 	if (pid == 0){
 		execvp(argv_server[0], (char**) argv_server);
@@ -65,65 +67,71 @@ int main (int argc, char *argv[]) {
 
 		FIFORequestChannel chan("control", FIFORequestChannel::CLIENT_SIDE);
 		
-		// ONE data point request
-		if (t != -1.0){
-			char buf[MAX_MESSAGE]; // 256
-			double reply;
-			// BOTH ecg numbers (executes the question and answer twice)
-			if (e == -1){
-				e = 1; // first ecg number
+		// PATIENT data request 
+		if (p != -1){
+			// ONE data point request
+			if (t != -1.0){
+				char buf[MAX_MESSAGE]; // 256
+				double reply;
+				// BOTH ecg numbers (executes the question and answer twice)
+				if (e == -1){
+					e = 1; // first ecg number
+					datamsg x(p, t, e);
+					memcpy(buf, &x, sizeof(datamsg));
+					chan.cwrite(buf, sizeof(datamsg)); // question
+					chan.cread(&reply, sizeof(double)); //answer
+					e = 2; // second ecg number
+					cout << "For person " << p << ", at time " << t << ", the value of ecg " << e << " is " << reply << endl;
+				}
 				datamsg x(p, t, e);
 				memcpy(buf, &x, sizeof(datamsg));
 				chan.cwrite(buf, sizeof(datamsg)); // question
 				chan.cread(&reply, sizeof(double)); //answer
-				e = 2; // second ecg number
 				cout << "For person " << p << ", at time " << t << ", the value of ecg " << e << " is " << reply << endl;
-			}
-			datamsg x(p, t, e);
-			memcpy(buf, &x, sizeof(datamsg));
-			chan.cwrite(buf, sizeof(datamsg)); // question
-			chan.cread(&reply, sizeof(double)); //answer
-			cout << "For person " << p << ", at time " << t << ", the value of ecg " << e << " is " << reply << endl;
-		
-		// file data request
-		} else {
 			
-			filemsg fm(o, l);
+			// first 1000 data points
+			} else {
+				
+
+			}
+		// FILE data request
+		} else if (filename != ""){
 			string fname = filename;
 
+			// 1. Get file length 
+			filemsg fm1(0, 0);
 			int len = sizeof(filemsg) + (fname.size() + 1);
 			char* buf2 = new char[len];
-			memcpy(buf2, &fm, sizeof(filemsg));
+			memcpy(buf2, &fm1, sizeof(filemsg));
 			strcpy(buf2 + sizeof(filemsg), fname.c_str());
 			chan.cwrite(buf2, len);  // I want the file length;
 			delete[] buf2;
-			// Get Reply:
-			// special case: want file length
-			if (o == 0 && l == 0){
-				__int64_t reply;
-				chan.cread(&reply, sizeof(__int64_t)); 
-				cout << "File length:" << reply << endl;
-			// normal case: write to file
-			} else {
-				FILE *fptr;
-				fptr = fopen("received/data.txt", "w");
 
-				// if (fptr == NULL) {
-				// 	perror("Failed to open file");
-				// 	delete[] reply;  // Clean up memory if fopen fails
-				// 	return 1;  // Or handle error accordingly
-				// }
+			__int64_t filelength;
+			chan.cread(&filelength, sizeof(__int64_t)); 
 
-				char* reply = new char[l];
-				// for (int i = 0; i < l; i++){
-					chan.cread(reply, l); 
-					fwrite(reply, 1, l, fptr);
-				// }
-				fclose(fptr);
+			// 2. Get file contents *******TODO implement -m
+			filemsg fm2(0, filelength);
+			len = sizeof(filemsg) + (fname.size() + 1);
+			buf2 = new char[len];
+			memcpy(buf2, &fm2, sizeof(filemsg));
+			strcpy(buf2 + sizeof(filemsg), fname.c_str());
+			chan.cwrite(buf2, len);
+			delete[] buf2;
+			//  write to file in packets of m bytes
+			FILE *fptr;
+			fptr = fopen("received/data.txt", "w");
+			char* reply;
+			for (__int64_t i = 0; i < filelength; i += (__int64_t) m){
+				int chunklen = min((__int64_t) m, filelength-i);
+				reply = new char[chunklen];
+				chan.cread(reply, chunklen); // TODO? If filename invalid, infinite waiting
+				fwrite(reply, 1, chunklen, fptr);
 				delete[] reply;
-
 			}
 
+			
+			fclose(fptr);
 		}
 				
 		// closing the channel    
