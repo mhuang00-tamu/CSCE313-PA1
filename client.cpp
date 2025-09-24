@@ -69,10 +69,10 @@ int main (int argc, char *argv[]) {
 		
 		// PATIENT data request 
 		if (p != -1){
+			char buf[MAX_MESSAGE]; // 256
+			double reply;
 			// ONE data point request
 			if (t != -1.0){
-				char buf[MAX_MESSAGE]; // 256
-				double reply;
 				// BOTH ecg numbers (executes the question and answer twice)
 				if (e == -1){
 					e = 1; // first ecg number
@@ -91,8 +91,34 @@ int main (int argc, char *argv[]) {
 			
 			// first 1000 data points
 			} else {
-				
+				FILE *fptr;
+				string filepath = "received/x1.csv";
+				fptr = fopen(filepath.c_str(), "w");
 
+				// send requests to server
+				for (int i = 0; i < 1000; i++){
+					e = 1; // first ecg number
+					t = i*0.004;
+					// write time to file
+					fprintf(fptr, "%.9g,", t);
+
+					datamsg x(p, t, e);
+					memcpy(buf, &x, sizeof(datamsg));
+					chan.cwrite(buf, sizeof(datamsg)); // question
+					chan.cread(&reply, sizeof(double)); //answer
+					// write to file
+					fprintf(fptr, "%.9g,", reply);
+
+					e = 2; // second ecg number
+					datamsg x2(p, t, e);
+					memcpy(buf, &x2, sizeof(datamsg));
+					chan.cwrite(buf, sizeof(datamsg)); // question
+					chan.cread(&reply, sizeof(double)); //answer
+					// write to file
+					fprintf(fptr, "%.9g\n", reply);
+				}
+
+				fclose(fptr);
 			}
 		// FILE data request
 		} else if (filename != ""){
@@ -109,40 +135,39 @@ int main (int argc, char *argv[]) {
 
 			__int64_t filelength;
 			chan.cread(&filelength, sizeof(__int64_t)); 
-			// if valid filename 
-			if (filelength != 0){
 				
-				FILE *fptr;
-				fptr = fopen("received/data.txt", "w");
+			FILE *fptr;
+			string filepath = "received/" + fname;
+			fptr = fopen(filepath.c_str(), "w");
 
-				// 2. Get file contents
-				for (__int64_t i = 0; i < filelength; i += (__int64_t) m){
-					// send request to server
-					int chunklen = min((__int64_t) m, filelength-i);
+			// 2. Get file contents
+			for (__int64_t i = 0; i < filelength; i += (__int64_t) m){
+				// send request to server
+				int chunklen = min((__int64_t) m, filelength-i);
 
-					filemsg fm2(i, chunklen);
-					len = sizeof(filemsg) + (fname.size() + 1);
-					buf2 = new char[len];
-					memcpy(buf2, &fm2, sizeof(filemsg));
-					strcpy(buf2 + sizeof(filemsg), fname.c_str());
-					chan.cwrite(buf2, len);
-					delete[] buf2;
-					// get reply from server
-					// write to file in packets of m bytes
-					char* reply;
-					reply = new char[chunklen];
-					chan.cread(reply, chunklen); 
-					fwrite(reply, 1, chunklen, fptr);
-					delete[] reply;
-				}
-
-				fclose(fptr);
+				filemsg fm2(i, chunklen);
+				len = sizeof(filemsg) + (fname.size() + 1);
+				buf2 = new char[len];
+				memcpy(buf2, &fm2, sizeof(filemsg));
+				strcpy(buf2 + sizeof(filemsg), fname.c_str());
+				chan.cwrite(buf2, len);
+				delete[] buf2;
+				// get reply from server
+				// write to file in packets of m bytes
+				char* reply;
+				reply = new char[chunklen];
+				chan.cread(reply, chunklen); 
+				fwrite(reply, 1, chunklen, fptr);
+				delete[] reply;
 			}
-			
+
+			fclose(fptr);
 		}
+			
+		
 				
 		// closing the channel    
-		MESSAGE_TYPE m = QUIT_MSG;
-		chan.cwrite(&m, sizeof(MESSAGE_TYPE));
+		MESSAGE_TYPE msg = QUIT_MSG;
+		chan.cwrite(&msg, sizeof(MESSAGE_TYPE));
 	}
 }
