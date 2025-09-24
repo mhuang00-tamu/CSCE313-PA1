@@ -109,29 +109,36 @@ int main (int argc, char *argv[]) {
 
 			__int64_t filelength;
 			chan.cread(&filelength, sizeof(__int64_t)); 
+			// if valid filename 
+			if (filelength != 0){
+				
+				FILE *fptr;
+				fptr = fopen("received/data.txt", "w");
 
-			// 2. Get file contents *******TODO implement -m
-			filemsg fm2(0, filelength);
-			len = sizeof(filemsg) + (fname.size() + 1);
-			buf2 = new char[len];
-			memcpy(buf2, &fm2, sizeof(filemsg));
-			strcpy(buf2 + sizeof(filemsg), fname.c_str());
-			chan.cwrite(buf2, len);
-			delete[] buf2;
-			//  write to file in packets of m bytes
-			FILE *fptr;
-			fptr = fopen("received/data.txt", "w");
-			char* reply;
-			for (__int64_t i = 0; i < filelength; i += (__int64_t) m){
-				int chunklen = min((__int64_t) m, filelength-i);
-				reply = new char[chunklen];
-				chan.cread(reply, chunklen); // TODO? If filename invalid, infinite waiting
-				fwrite(reply, 1, chunklen, fptr);
-				delete[] reply;
+				// 2. Get file contents
+				for (__int64_t i = 0; i < filelength; i += (__int64_t) m){
+					// send request to server
+					int chunklen = min((__int64_t) m, filelength-i);
+
+					filemsg fm2(i, chunklen);
+					len = sizeof(filemsg) + (fname.size() + 1);
+					buf2 = new char[len];
+					memcpy(buf2, &fm2, sizeof(filemsg));
+					strcpy(buf2 + sizeof(filemsg), fname.c_str());
+					chan.cwrite(buf2, len);
+					delete[] buf2;
+					// get reply from server
+					// write to file in packets of m bytes
+					char* reply;
+					reply = new char[chunklen];
+					chan.cread(reply, chunklen); 
+					fwrite(reply, 1, chunklen, fptr);
+					delete[] reply;
+				}
+
+				fclose(fptr);
 			}
-
 			
-			fclose(fptr);
 		}
 				
 		// closing the channel    
