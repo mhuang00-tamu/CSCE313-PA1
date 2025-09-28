@@ -1,0 +1,11 @@
+File size (MB) vs Time taken (s)
+1 MB - 0.00178413 s
+10 MB - 0.0105545 s
+50 MB - 0.0529766 s
+100 MB - 0.0963888 s
+
+Analysis:
+The times taken seem to be increasing linearly with the file size. 
+
+The main bottleneck is probably the time to communicate between the server and the client, since there are many chunks that need to be read and written. 
+Additionally, experimenting with lowering chunk size (increasing # of chunks) using the -m flag increases time taken.
